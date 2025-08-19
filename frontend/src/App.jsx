@@ -54,7 +54,7 @@ Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
   const [linkInput, setLinkInput] = useState("");
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [error, setError] = useState(""); // State để lưu lỗi
+  const [error, setError] = useState("");
   const messagesEndRef = useRef(null);
 
   // Use in-memory storage instead of localStorage
@@ -74,6 +74,56 @@ Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
   useEffect(() => {
     scrollToBottom();
   }, [activeChat, chats]);
+
+  // Function để xóa session ở backend
+  const endChatSession = async (sessionId) => {
+    try {
+      const response = await fetch(`${API_URL}/end_chat/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      
+      if (!response.ok) {
+        console.warn(`Failed to end session ${sessionId} on server:`, response.status);
+      } else {
+        console.log(`Session ${sessionId} ended successfully`);
+      }
+    } catch (error) {
+      console.error(`Error ending session ${sessionId}:`, error);
+    }
+  };
+
+  // Cleanup khi component unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup all active sessions when component unmounts
+      chats.forEach(chat => {
+        if (chat.session_id && !chat.isGuide) {
+          endChatSession(chat.session_id);
+        }
+      });
+    };
+  }, []);
+
+  // Handle khi user thoát khỏi trang
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Cleanup sessions when user closes/refreshes page
+      chats.forEach(chat => {
+        if (chat.session_id && !chat.isGuide) {
+          // Use sendBeacon for reliable cleanup on page unload
+          navigator.sendBeacon(`${API_URL}/end_chat/${chat.session_id}`, 
+            JSON.stringify({}));
+        }
+      });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [chats]);
 
   const getCurrentChat = () => {
     return chats.find(chat => chat.id === activeChat);
@@ -129,7 +179,7 @@ Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
       }
 
       const data = await response.json();
-      console.log("API Response:", data); // Debug log
+      console.log("API Response:", data);
 
       // Parse response correctly
       let botResponse;
@@ -188,7 +238,7 @@ Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
       return;
     }
 
-    setError(""); // Clear lỗi cũ
+    setError("");
     setIsCreatingChat(true);
 
     try {
@@ -206,7 +256,7 @@ Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
         throw new Error(errorMessage);
       }
 
-      console.log("Create Chat Response:", data); // Debug log
+      console.log("Create Chat Response:", data);
       
       // Kiểm tra dữ liệu trả về
       if (!data.session_id) {
@@ -244,11 +294,10 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
       setActiveChat(newChat.id);
       setShowAddModal(false);
       setLinkInput("");
-      setError(""); // Clear error khi thành công
+      setError("");
     } catch (error) {
       console.error("Error creating new chat:", error);
       
-      // Hiển thị lỗi lên UI thay vì alert
       let errorMessage = "Có lỗi không xác định xảy ra";
       
       if (error.message.includes("Không phải link tiki")) {
@@ -269,7 +318,8 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
     }
   };
 
-  const deleteChat = (chatId) => {
+  // Cập nhật function deleteChat với cleanup backend
+  const deleteChat = async (chatId) => {
     const chatToDelete = chats.find(chat => chat.id === chatId);
     
     if (chatToDelete?.isGuide) {
@@ -282,13 +332,77 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
       return;
     }
     
+    // Xóa session ở backend nếu có
+    if (chatToDelete?.session_id) {
+      await endChatSession(chatToDelete.session_id);
+    }
+    
+    // Xóa chat ở frontend
     setChats(prev => prev.filter(chat => chat.id !== chatId));
     
+    // Chuyển sang chat khác nếu đang ở chat bị xóa
     if (activeChat === chatId) {
       const remainingChats = chats.filter(chat => chat.id !== chatId);
       if (remainingChats.length > 0) {
         setActiveChat(remainingChats[0].id);
       }
+    }
+  };
+
+  // Function xóa tất cả chat (tuỳ chọn)
+  const clearAllChats = async () => {
+    if (!confirm('Bạn có chắc muốn xóa tất cả chat? Hành động này không thể hoàn tác!')) {
+      return;
+    }
+
+    const sessionsToEnd = chats
+      .filter(chat => chat.session_id && !chat.isGuide)
+      .map(chat => chat.session_id);
+
+    // End all sessions concurrently
+    await Promise.allSettled(
+      sessionsToEnd.map(sessionId => endChatSession(sessionId))
+    );
+
+    // Keep only the guide chat
+    const guideChat = chats.find(chat => chat.isGuide);
+    if (guideChat) {
+      setChats([guideChat]);
+      setActiveChat(guideChat.id);
+    } else {
+      // Create new guide chat if not found
+      const newGuideChat = {
+        id: 1,
+        title: "Hướng dẫn sử dụng",
+        messages: [
+          { 
+            sender: "bot", 
+            text: `**Chào mừng bạn đến với AI Shopping Assistant!**
+
+Tôi là trợ lý mua sắm thông minh, có thể giúp bạn:
+
+**Các tính năng chính:**
+- Tư vấn sản phẩm chi tiết.
+- Đánh giá ưu nhược điểm từ các đánh giá của khách hàng đã mua sản phẩm.
+- Giúp bạn tổng hợp các phản hồi của khách hàng qua đó giúp bạn biết tình trạng thực tế của sản phẩm mà không cần phải đi đọc từng bình luận.
+
+**Cách sử dụng:**
+- 1. Nhấn nút **"Chat mới"** ở sidebar
+- 2. Dán link sản phẩm từ các trang thương mại điện tử
+- 3. Chờ tôi lấy thông tin sản phẩm
+- 4. Bắt đầu hỏi bất cứ điều gì về sản phẩm!
+
+Hãy tạo chat mới với link sản phẩm để bắt đầu nhé!`,
+            timestamp: new Date()
+          }
+        ],
+        createdAt: new Date(),
+        session_id: null,
+        product_id: null,
+        isGuide: true
+      };
+      setChats([newGuideChat]);
+      setActiveChat(1);
     }
   };
 
@@ -309,32 +423,6 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
     } catch (error) {
       return "N/A";
     }
-  };
-
-  // Simple markdown renderer for basic formatting
-  const renderMessage = (text) => {
-    if (!text) return null;
-    
-    return text.split('\n').map((line, index) => {
-      // Bold text **text**
-      if (line.startsWith('**') && line.endsWith('**') && line.length > 4) {
-        return <div key={index} className="font-bold text-gray-900 mb-2">{line.slice(2, -2)}</div>;
-      }
-      // List items starting with -
-      if (line.startsWith('- ')) {
-        return <div key={index} className="ml-4 mb-1 flex items-start"><span className="mr-2">•</span><span>{line.slice(2)}</span></div>;
-      }
-      // Numbered lists
-      if (line.match(/^\d+\./)) {
-        return <div key={index} className="ml-4 mb-1">{line}</div>;
-      }
-      // Empty lines
-      if (!line.trim()) {
-        return <br key={index} />;
-      }
-      // Regular text
-      return <div key={index} className="mb-1">{line}</div>;
-    });
   };
 
   const currentChat = getCurrentChat();
@@ -375,6 +463,17 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
             <Plus className="w-5 h-5" />
             {sidebarOpen && <span>Chat mới</span>}
           </button>
+          
+          {/* Button xóa tất cả chat (chỉ hiện khi có nhiều hơn 1 chat) */}
+          {sidebarOpen && chats.filter(chat => !chat.isGuide).length > 0 && (
+            <button
+              onClick={clearAllChats}
+              className="w-full mt-2 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center gap-2 py-2 transition-colors text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Xóa tất cả</span>
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
@@ -417,9 +516,27 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
                   </div>
                   {sidebarOpen && !chat.isGuide && (
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        deleteChat(chat.id);
+                        
+                        // Hiển thị loading state
+                        const button = e.currentTarget;
+                        const originalContent = button.innerHTML;
+                        button.disabled = true;
+                        button.innerHTML = '<div class="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>';
+                        
+                        try {
+                          await deleteChat(chat.id);
+                        } catch (error) {
+                          console.error('Error deleting chat:', error);
+                          alert('Có lỗi xảy ra khi xóa chat!');
+                        } finally {
+                          // Reset button state (nếu component vẫn còn)
+                          if (button && button.parentNode) {
+                            button.disabled = false;
+                            button.innerHTML = originalContent;
+                          }
+                        }
                       }}
                       className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded text-red-500 transition-all"
                     >
@@ -616,8 +733,8 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
                 <button
                   onClick={() => {
                     setShowAddModal(false);
-                    setError(""); // Clear error khi đóng modal
-                    setLinkInput(""); // Clear input
+                    setError("");
+                    setLinkInput("");
                   }}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
@@ -652,7 +769,7 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
                     value={linkInput}
                     onChange={(e) => {
                       setLinkInput(e.target.value);
-                      setError(""); // Clear error khi user nhập lại
+                      setError("");
                     }}
                     placeholder="https://tiki.vn/..."
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
@@ -681,8 +798,8 @@ Bạn có thể bắt đầu hỏi về sản phẩm ngay bây giờ!`,
                   <button
                     onClick={() => {
                       setShowAddModal(false);
-                      setError(""); // Clear error khi đóng modal
-                      setLinkInput(""); // Clear input
+                      setError("");
+                      setLinkInput("");
                     }}
                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                   >

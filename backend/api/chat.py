@@ -149,7 +149,15 @@ async def chat(req: ChatRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi server: {str(e)}")
-    
+
+@app.post("/end_chat/{session_id}")
+async def end_chat(session_id: str):
+    try:
+        conversation_manager.clear_session(session_id)
+        return {"status": "session_cleared", "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa session: {str(e)}")
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": time.time()}
