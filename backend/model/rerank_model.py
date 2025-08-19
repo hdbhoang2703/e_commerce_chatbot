@@ -24,20 +24,3 @@ class RerankModel:
             return ranked[:top_k]
         return ranked
 
-def main():
-    reranker = RerankModel(api_key="s1OcFjuIJzI7DfJKiixyL3nCYsq04Z4W")
-
-    query = "Tôi có thể đổi trả sản phẩm điện tử như thế nào?"
-    contexts = [
-        "Sản phẩm điện tử đã kích hoạt bảo hành không được đổi trả.",
-        "Bạn có thể đổi trả sản phẩm trong vòng 7 ngày nếu còn nguyên tem.",
-        "Chúng tôi hỗ trợ giao hàng toàn quốc.",
-        "Chính sách đổi trả không áp dụng cho hàng đã sử dụng."
-    ]
-
-    # Rerank và in kết quả
-    results = reranker.rerank(query, contexts, top_k=2)
-    print(results)
-
-if __name__ == "__main__":
-    main()

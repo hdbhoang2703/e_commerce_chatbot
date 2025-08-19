@@ -25,16 +25,3 @@ class EmbeddingModel:
 
         return np.vstack(all_embeddings)
     
-def main():
-    
-    api_key = "s1OcFjuIJzI7DfJKiixyL3nCYsq04Z4W"
-
-    embedding_model = EmbeddingModel(api_key=api_key)
-    
-    texts = ['san pham:ca phe khong duong','san pham:ca phe co duong']
-
-    emb_texts = embedding_model.encode(texts = texts)
-    print(emb_texts)
-    
-if __name__ == "__main__":
-    main()
