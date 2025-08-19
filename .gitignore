@@ -1,0 +1,42 @@
+
+# Python (FastAPI backend)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+backend/.env
+
+# Logs
+*.log
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+node_modules/
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Env files (frontend)
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
